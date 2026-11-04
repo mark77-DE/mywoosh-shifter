@@ -7,13 +7,14 @@
 #include <Preferences.h>
 
 // ---- Pin configuration ----
-static const uint8_t PIN_BTN[4] = {4, 5, 6, 7};  // buttons 1..4 (to GND, internal pull-up)
+static const uint8_t PIN_BTN[4] = {4, 5, 6, 10};  // buttons 1..4 (to GND, internal pull-up)
 
-// ---- Status LED ----
-static const uint8_t  PIN_LED         = 8;     // onboard LED
-static const bool     LED_ACTIVE_LOW  = true;  // Super Mini LED is on when pin is LOW
-static const uint32_t BLINK_MS        = 500;   // blink half-period while not connected
-static const uint32_t CONFIG_BLINK_MS = 150;   // fast blink in config mode
+// ---- Status LED (single LED) ----
+static const uint8_t  PIN_LED           = 9;      // GPIO9 is a strapping pin (BOOT): the LED must not pull it LOW at reset
+static const bool     LED_ACTIVE_LOW    = true;   // wiring: 3V3 -> resistor -> LED -> pin (LED on when pin is LOW)
+static const uint32_t BLINK_MS          = 500;    // slow blink half-period while not connected
+static const uint32_t CONNECTED_SHOW_MS = 3000;   // stay lit this long after connecting
+static const uint32_t CONFIG_BLINK_MS   = 150;    // fast blink half-period in config mode
 
 // ---- Config mode ----
 static const char*    AP_SSID        = "MyWoosh-Shifter-Setup";  // open network, no password
@@ -59,6 +60,7 @@ static NimBLEServer*         server = nullptr;
 static NimBLEHIDDevice*      hid    = nullptr;
 static NimBLECharacteristic* input  = nullptr;
 static volatile bool         connected = false;
+static volatile uint32_t     connectedSince = 0;
 
 static Preferences prefs;
 static WebServer   web(80);
@@ -72,10 +74,10 @@ static void setLed(bool on) {
   digitalWrite(PIN_LED, (on == LED_ACTIVE_LOW) ? LOW : HIGH);
 }
 
-// Blink while disconnected, solid while connected (non-blocking)
-static void updateLed(uint32_t now) {
+// Slow blink while disconnected, solid for 3 s after connecting, then off
+static void updateStatusLed(uint32_t now) {
   if (connected) {
-    setLed(true);
+    setLed((now - connectedSince) < CONNECTED_SHOW_MS);
   } else {
     setLed((now / BLINK_MS) % 2 == 0);
   }
@@ -86,6 +88,7 @@ static void updateLed(uint32_t now) {
 // ---------------------------------------------------------------------------
 class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer*) override {
+    connectedSince = millis();
     connected = true;
     Serial.println("BLE connected");
   }
@@ -277,7 +280,14 @@ static void runConfigMode() {
   while (true) {
     dns.processNextRequest();
     web.handleClient();
-    setLed((millis() / CONFIG_BLINK_MS) % 2 == 0);
+    // hotspot up: fast blink, client connected: double blink
+    uint32_t t = millis();
+    if (WiFi.softAPgetStationNum() > 0) {
+      uint32_t phase = t % 1200;
+      setLed(phase < 100 || (phase >= 200 && phase < 300));
+    } else {
+      setLed((t / CONFIG_BLINK_MS) % 2 == 0);
+    }
     if (restartAt != 0 && (int32_t)(millis() - restartAt) >= 0) {
       ESP.restart();
     }
@@ -336,7 +346,7 @@ void setup() {
 
 void loop() {
   uint32_t now = millis();
-  updateLed(now);
+  updateStatusLed(now);
 
   for (auto& b : buttons) {
     if (b.keycode == 0) continue;  // button disabled in config
