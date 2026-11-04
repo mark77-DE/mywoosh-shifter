@@ -7,12 +7,13 @@ Kleine Bluetooth-Tastatur (BLE-HID) auf Basis eines ESP32-C3 Super Mini mit vier
 | 1      | GPIO4 | `i`           | hochschalten     |
 | 2      | GPIO5 | `k`           | herunterschalten |
 | 3      | GPIO6 | Pfeil links   | links abbiegen   |
-| 4      | GPIO7 | Pfeil rechts  | rechts abbiegen  |
+| 4      | GPIO10 | Pfeil rechts | rechts abbiegen  |
 
 ## Hardware
 
 - ESP32-C3 Super Mini (Bluetooth 5 LE)
 - 4 Taster
+- 1 LED mit Vorwiderstand (ca. 1 kΩ)
 
 ## Verdrahtung
 
@@ -22,7 +23,7 @@ Jeder Taster wird zwischen seinen GPIO-Pin und GND geschaltet. Externe Widerstä
 GPIO4 ──[Taster 1]── GND
 GPIO5 ──[Taster 2]── GND
 GPIO6 ──[Taster 3]── GND
-GPIO7 ──[Taster 4]── GND
+GPIO10 ──[Taster 4]── GND
 ```
 
 ## Build & Upload
@@ -44,13 +45,18 @@ Falls der Upload nicht startet: BOOT gedrückt halten, dabei Reset drücken und 
 
 ## Status-LED
 
-Die Onboard-LED (GPIO8) zeigt den Zustand an:
+Eine LED an GPIO9 zeigt den Zustand an:
 
-| LED                | Bedeutung                            |
-|--------------------|--------------------------------------|
-| blinkt langsam     | nicht verbunden, wartet auf Kopplung |
-| leuchtet dauerhaft | mit dem Gerät verbunden              |
-| blinkt schnell     | Konfigurationsmodus (Hotspot aktiv)  |
+| LED                     | Bedeutung                              |
+|-------------------------|----------------------------------------|
+| blinkt langsam          | nicht verbunden, wartet auf Kopplung   |
+| 3 Sekunden an, dann aus | mit dem Gerät verbunden                |
+| blinkt schnell          | Konfigurationsmodus, Hotspot aktiv     |
+| Doppelblinken           | Konfigurationsmodus, Client verbunden  |
+
+Verdrahtung: 3V3, Vorwiderstand, LED, GPIO9. Die LED leuchtet also, wenn der Pin LOW ist.
+
+Wichtig: GPIO9 ist ein Strapping-Pin (BOOT-Taster). Eine LED, die nach GND führt, würde den Pin beim Start nach unten ziehen und den ESP in den Download-Modus zwingen.
 
 ## Tasten per Handy zuordnen
 
@@ -71,8 +77,8 @@ Im Konfigurationsmodus ist Bluetooth aus, im normalen Betrieb ist WLAN aus. Die 
 Oben in `src/main.cpp` lassen sich anpassen:
 
 - `PIN_BTN`: GPIO-Pins der vier Taster
-- `LED_ACTIVE_LOW`: auf `false` setzen, falls die LED verkehrt herum reagiert
-- `BLINK_MS`, `CONFIG_BLINK_MS`: Blinkgeschwindigkeit
+- `PIN_LED`, `LED_ACTIVE_LOW`: LED-Pin und Polarität (`true`: LED leuchtet bei LOW)
+- `BLINK_MS`, `CONFIG_BLINK_MS`, `CONNECTED_SHOW_MS`: Blinkgeschwindigkeit und Leuchtdauer nach dem Verbinden
 - `AP_SSID`: Name des Konfigurations-WLANs
 - `CONFIG_HOLD_MS`: wie lange Taster 1 beim Einschalten gehalten werden muss
 - `DEFAULT_KEYS`: Standardbelegung, solange noch nichts gespeichert wurde
